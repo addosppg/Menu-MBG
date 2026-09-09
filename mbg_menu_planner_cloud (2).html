@@ -1,0 +1,2194 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Perencana Menu MBG - Cloud Auth & Role Based</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            200: '#bbf7d0',
+                            300: '#86efac',
+                            500: '#22c55e',
+                            600: '#16a34a',
+                            700: '#15803d',
+                            800: '#166534',
+                            900: '#14532d',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Google Fonts & Phosphor Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    
+    <!-- React & Babel CDNs -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #1e293b; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        .fade-in { animation: fadeIn 0.2s ease-in-out; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased selection:bg-brand-500 selection:text-white">
+    <div id="root"></div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            signInAnonymously, 
+            signInWithCustomToken, 
+            onAuthStateChanged 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            doc, 
+            getDoc, 
+            setDoc, 
+            onSnapshot 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'mbg-menu-planner-default';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : {
+                apiKey: "demo-api-key",
+                authDomain: "demo-app.firebaseapp.com",
+                projectId: "demo-app",
+                storageBucket: "demo-app.appspot.com",
+                messagingSenderId: "123456789",
+                appId: "1:123456789:web:demo"
+            };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        window.FirebaseServices = {
+            app,
+            auth,
+            db,
+            appId,
+            signInAnonymously,
+            signInWithCustomToken,
+            onAuthStateChanged,
+            doc,
+            getDoc,
+            setDoc,
+            onSnapshot
+        };
+
+        window.dispatchEvent(new Event('firebase-ready'));
+    </script>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef } = React;
+
+        const CATEGORIES = [
+            { id: 'karbo', name: 'Karbohidrat', icon: 'ph-bowl-food', color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200' },
+            { id: 'heko', name: 'Protein Hewani', icon: 'ph-fish-simple', color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200' },
+            { id: 'nabati', name: 'Protein Nabati', icon: 'ph-leaf', color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200' },
+            { id: 'sayur', name: 'Sayur', icon: 'ph-plant', color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-200' },
+            { id: 'buah', name: 'Buah', icon: 'ph-apple-logo', color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200' }
+        ];
+
+        const DEFAULT_INITIAL_STATE = {
+            accounts: {
+                addo: { username: 'Addo', password: 'addo2026', isSuperAdmin: true },
+                ichan: { username: 'Ichan', password: 'ichan2026', isSuperAdmin: false }
+            },
+            periods: [
+                { 
+                    id: '1', 
+                    name: 'Periode 1', 
+                    week1Dates: ['2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04', '2026-09-05'],
+                    week2Dates: ['2026-09-08', '2026-09-09', '2026-09-10', '2026-09-11', '2026-09-12']
+                }
+            ],
+            menuData: {
+                '1': {
+                    '2026-09-01': {
+                        menuNames: {
+                            karbo: 'Nasi Putih Premium',
+                            heko: 'Ayam Semur Kecap',
+                            nabati: 'Tempe Bacem Organik',
+                            sayur: 'Tumis Buncis & Wortel',
+                            buah: 'Pisang Ambon Segar'
+                        },
+                        karbo: [{ id: 's1', name: 'Beras Putih Premium', brand: 'Bulog', amountText: '25 Kg' }],
+                        heko: [{ id: 's2', name: 'Ayam Fillet Dada', brand: 'Fiesta', amountText: '15 Kg' }],
+                        nabati: [{ id: 's3', name: 'Tempe Organik', brand: 'Lokal', amountText: '10 Papan' }],
+                        sayur: [
+                            { id: 's4', name: 'Wortel Impor', brand: 'Pasar', amountText: '5 Kg' },
+                            { id: 's5', name: 'Buncis Segar', brand: 'Pasar', amountText: '3 Kg' }
+                        ],
+                        buah: [{ id: 's6', name: 'Pisang Ambon', brand: 'Sunpride', amountText: '15 Sisir' }]
+                    }
+                }
+            },
+            masterIngredients: {
+                karbo: [
+                    { id: 'm1', name: 'Beras Putih Premium', brand: 'Bulog', amountText: '25 Kg' },
+                    { id: 'm2', name: 'Beras Merah Organik', brand: 'Lokal', amountText: '20 Kg' }
+                ],
+                heko: [
+                    { id: 'm4', name: 'Ayam Fillet Dada', brand: 'Fiesta', amountText: '15 Kg' },
+                    { id: 'm5', name: 'Telur Ayam Ras', brand: 'Peternakan Jaya', amountText: '15 Kg' }
+                ],
+                nabati: [
+                    { id: 'm7', name: 'Tempe Organik', brand: 'Lokal', amountText: '10 Papan' },
+                    { id: 'm8', name: 'Tahu Putih Sutra', brand: 'Lokal', amountText: '100 Biji' }
+                ],
+                sayur: [
+                    { id: 'm10', name: 'Wortel Impor', brand: 'Pasar', amountText: '5 Kg' },
+                    { id: 'm11', name: 'Buncis Segar', brand: 'Pasar', amountText: '3 Kg' }
+                ],
+                buah: [
+                    { id: 'm13', name: 'Pisang Ambon', brand: 'Sunpride', amountText: '15 Sisir' },
+                    { id: 'm14', name: 'Jeruk Medan', brand: 'Lokal', amountText: '10 Kg' }
+                ]
+            },
+            masterMenus: {
+                karbo: [
+                    { id: 'mm1', name: 'Nasi Putih Premium', ingredients: [{ name: 'Beras Putih Premium', brand: 'Bulog', amountText: '25 Kg' }] }
+                ],
+                heko: [
+                    { id: 'mm3', name: 'Ayam Semur Kecap', ingredients: [{ name: 'Ayam Fillet Dada', brand: 'Fiesta', amountText: '15 Kg' }] }
+                ],
+                nabati: [
+                    { id: 'mm5', name: 'Tempe Bacem Organik', ingredients: [{ name: 'Tempe Organik', brand: 'Lokal', amountText: '10 Papan' }] }
+                ],
+                sayur: [
+                    { id: 'mm7', name: 'Tumis Buncis & Wortel', ingredients: [{ name: 'Wortel Impor', brand: 'Pasar', amountText: '5 Kg' }, { name: 'Buncis Segar', brand: 'Pasar', amountText: '3 Kg' }] }
+                ],
+                buah: [
+                    { id: 'mm9', name: 'Pisang Ambon Segar', ingredients: [{ name: 'Pisang Ambon', brand: 'Sunpride', amountText: '15 Sisir' }] }
+                ]
+            }
+        };
+
+        const formatDate = (dateStr) => {
+            if (!dateStr) return '';
+            const parts = dateStr.split('-');
+            if (parts.length !== 3) return dateStr;
+            const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+            return d.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+        };
+
+        const IngredientForm = ({ date, categoryId, onAdd, masterIngredients = [], onSaveToMaster, onOpenMasterModal, isEditor }) => {
+            const [name, setName] = useState('');
+            const [brand, setBrand] = useState('');
+            const [amountText, setAmountText] = useState('');
+            const [saveToMaster, setSaveToMaster] = useState(false);
+            const [selectedMasterId, setSelectedMasterId] = useState('');
+
+            if (!isEditor) return null;
+
+            const handleMasterSelect = (e) => {
+                const masterId = e.target.value;
+                setSelectedMasterId(masterId);
+                if (masterId) {
+                    const item = masterIngredients.find(m => m.id === masterId);
+                    if (item) {
+                        setName(item.name || '');
+                        setBrand(item.brand && item.brand !== 'N/A' ? item.brand : '');
+                        setAmountText(item.amountText || '');
+                    }
+                }
+            };
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (!name.trim() || !amountText.trim()) return;
+                
+                onAdd(date, categoryId, {
+                    name: name.trim(),
+                    brand: brand.trim() || 'N/A',
+                    amountText: amountText.trim()
+                });
+
+                if (saveToMaster) {
+                    onSaveToMaster(categoryId, {
+                        name: name.trim(),
+                        brand: brand.trim() || 'N/A',
+                        amountText: amountText.trim()
+                    });
+                }
+
+                setName('');
+                setBrand('');
+                setAmountText('');
+                setSaveToMaster(false);
+                setSelectedMasterId('');
+            };
+
+            return (
+                <form onSubmit={handleSubmit} className="bg-slate-50 border border-slate-200/90 rounded-lg p-3 shadow-2xs space-y-2 mt-2">
+                    <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-slate-200/60 flex-wrap">
+                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 flex-1 min-w-[220px]">
+                            <i className="ph-bold ph-bookmark-simple text-brand-600 text-sm"></i>
+                            <span className="shrink-0">Master Bahan:</span>
+                            <select 
+                                value={selectedMasterId} 
+                                onChange={handleMasterSelect}
+                                className="w-full text-xs px-2 py-1 rounded border border-slate-300 bg-white font-medium focus:outline-none focus:ring-1 focus:ring-brand-500 truncate"
+                            >
+                                <option value="">-- Pilih dari Bahan Tersimpan --</option>
+                                {masterIngredients.map(m => (
+                                    <option key={m.id} value={m.id}>{m.name} {m.brand && m.brand !== 'N/A' ? `(${m.brand})` : ''} - {m.amountText}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <button 
+                            type="button" 
+                            onClick={() => onOpenMasterModal(categoryId)}
+                            className="text-[11px] font-bold text-brand-700 hover:text-brand-800 bg-brand-50 hover:bg-brand-100 px-2.5 py-1 rounded-md border border-brand-200 transition-colors flex items-center gap-1 shrink-0"
+                            title="Kelola Daftar Master Bahan"
+                        >
+                            <i className="ph-bold ph-gear"></i> Kelola Master
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <input 
+                            type="text" 
+                            placeholder="Nama Bahan (Cth: Beras)" 
+                            value={name} 
+                            onChange={e => setName(e.target.value)}
+                            className="w-full text-xs px-2.5 py-1.5 rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-500 bg-white"
+                            required
+                        />
+                        <input 
+                            type="text" 
+                            placeholder="Brand / Merk (Cth: Bulog)" 
+                            value={brand} 
+                            onChange={e => setBrand(e.target.value)}
+                            className="w-full text-xs px-2.5 py-1.5 rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-500 bg-white"
+                        />
+                        <input 
+                            type="text" 
+                            placeholder="Jumlah (Cth: 5 Kg / 2 L)" 
+                            value={amountText} 
+                            onChange={e => setAmountText(e.target.value)}
+                            className="w-full text-xs px-2.5 py-1.5 rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-500 bg-white"
+                            required
+                        />
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-1">
+                        <label className="flex items-center gap-1.5 text-[11px] text-slate-600 font-semibold cursor-pointer select-none">
+                            <input 
+                                type="checkbox" 
+                                checked={saveToMaster} 
+                                onChange={e => setSaveToMaster(e.target.checked)}
+                                className="rounded text-brand-600 focus:ring-brand-500"
+                            />
+                            <span>Simpan ke Master Bahan untuk penggunaan berikutnya</span>
+                        </label>
+
+                        <button type="submit" className="bg-brand-600 hover:bg-brand-700 text-white font-medium text-xs px-3 py-1.5 rounded transition-colors flex items-center gap-1 shadow-2xs self-end sm:self-auto">
+                            <i className="ph-bold ph-plus"></i> Tambah Bahan
+                        </button>
+                    </div>
+                </form>
+            );
+        };
+
+        const CloudLoginModal = ({ onLogin, defaultName = '', isAuthenticating, accounts = {} }) => {
+            const [username, setUsername] = useState(defaultName);
+            const [password, setPassword] = useState('');
+            const [errorMsg, setErrorMsg] = useState('');
+
+            const activeAccounts = (accounts && Object.keys(accounts).length > 0) 
+                ? accounts 
+                : DEFAULT_INITIAL_STATE.accounts;
+
+            const handleLogin = (e) => {
+                e.preventDefault();
+                setErrorMsg('');
+                const trimmedName = username.trim();
+                const lowerName = trimmedName.toLowerCase();
+
+                const matchedAccount = activeAccounts[lowerName];
+
+                if (matchedAccount) {
+                    if (password !== matchedAccount.password) {
+                        setErrorMsg(`Password salah untuk akun ${matchedAccount.username}!`);
+                        return;
+                    }
+                    onLogin({ 
+                        name: matchedAccount.username, 
+                        role: 'editor', 
+                        isSuperAdmin: !!matchedAccount.isSuperAdmin 
+                    });
+                } else {
+                    setErrorMsg('Username tidak terdaftar sebagai Editor. Gunakan tombol "Masuk sebagai Tamu" untuk melihat rekap pesanan.');
+                }
+            };
+
+            const handleGuestLogin = () => {
+                onLogin({ name: 'Tamu / Guest', role: 'guest', isSuperAdmin: false });
+            };
+
+            return (
+                <div className="fixed inset-0 z-50 bg-slate-900/75 backdrop-blur-md flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden fade-in">
+                        <div className="p-6 bg-gradient-to-br from-brand-600 to-brand-800 text-white text-center">
+                            <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center mx-auto mb-3 backdrop-blur-md border border-white/20">
+                                <i className="ph-bold ph-shield-check text-3xl text-white"></i>
+                            </div>
+                            <h2 className="text-xl font-extrabold tracking-tight">Login MBG Cloud Planner</h2>
+                            <p className="text-xs text-brand-100 mt-1">Sistem Otentikasi & Hak Akses</p>
+                        </div>
+
+                        <div className="p-6 space-y-4">
+                            {errorMsg && (
+                                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-xs font-bold flex items-center gap-2">
+                                    <i className="ph-bold ph-warning-circle text-base shrink-0"></i>
+                                    <span>{errorMsg}</span>
+                                </div>
+                            )}
+
+                            <form onSubmit={handleLogin} className="space-y-3">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 mb-1">Username Editor:</label>
+                                    <input 
+                                        type="text" 
+                                        placeholder="Masukkan nama (Addo / Ichan / dll)"
+                                        value={username}
+                                        onChange={e => setUsername(e.target.value)}
+                                        className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50 font-medium text-slate-800"
+                                        required
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-700 mb-1">Password Editor:</label>
+                                    <input 
+                                        type="password" 
+                                        placeholder="Masukkan Password"
+                                        value={password}
+                                        onChange={e => setPassword(e.target.value)}
+                                        className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-brand-500 bg-slate-50 font-medium text-slate-800"
+                                        required
+                                    />
+                                </div>
+
+                                <button 
+                                    type="submit" 
+                                    disabled={isAuthenticating}
+                                    className="w-full py-2.5 bg-brand-600 hover:bg-brand-700 disabled:bg-slate-400 text-white font-bold text-xs rounded-xl shadow-md transition-colors flex items-center justify-center gap-2"
+                                >
+                                    {isAuthenticating ? (
+                                        <React.Fragment>
+                                            <i className="ph-bold ph-spinner animate-spin"></i> Menghubungkan...
+                                        </React.Fragment>
+                                    ) : (
+                                        <React.Fragment>
+                                            <i className="ph-bold ph-sign-in"></i> Masuk Editor
+                                        </React.Fragment>
+                                    )}
+                                </button>
+                            </form>
+
+                            <div className="relative my-4">
+                                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200"></div></div>
+                                <div className="relative flex justify-center text-[10px] uppercase font-bold text-slate-400 bg-white px-2">Atau</div>
+                            </div>
+
+                            <button 
+                                type="button"
+                                onClick={handleGuestLogin}
+                                disabled={isAuthenticating}
+                                className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-2 shadow-2xs"
+                            >
+                                <i className="ph-bold ph-eye text-brand-600 text-base"></i> Masuk sebagai Tamu (Lihat Rekap Pesanan)
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        function App() {
+            const [fb, setFb] = useState(null);
+            const [authUser, setAuthUser] = useState(null);
+            const [isAuthenticating, setIsAuthenticating] = useState(true);
+            const [cloudSynced, setCloudSynced] = useState(false);
+
+            const [currentUser, setCurrentUser] = useState(null);
+            const isEditor = currentUser?.role === 'editor';
+
+            const [accounts, setAccounts] = useState(DEFAULT_INITIAL_STATE.accounts);
+            const [periods, setPeriods] = useState(DEFAULT_INITIAL_STATE.periods);
+            const [activePeriodId, setActivePeriodId] = useState('1');
+            const [menuData, setMenuData] = useState(DEFAULT_INITIAL_STATE.menuData);
+
+            const [masterIngredients, setMasterIngredients] = useState(DEFAULT_INITIAL_STATE.masterIngredients);
+            const [masterMenus, setMasterMenus] = useState(DEFAULT_INITIAL_STATE.masterMenus);
+
+            const [isChangePasswordModalOpen, setIsChangePasswordModalOpen] = useState(false);
+            const [oldPassword, setOldPassword] = useState('');
+            const [newPassword, setNewPassword] = useState('');
+            const [confirmPassword, setConfirmPassword] = useState('');
+
+            const [isManageAccountsModalOpen, setIsManageAccountsModalOpen] = useState(false);
+            const [newEditorUsername, setNewEditorUsername] = useState('');
+            const [newEditorPassword, setNewEditorPassword] = useState('');
+            const [resetTargetUser, setResetTargetUser] = useState(null);
+            const [resetNewPassword, setResetNewPassword] = useState('');
+
+            const [isMasterModalOpen, setIsMasterModalOpen] = useState(false);
+            const [activeMasterTab, setActiveMasterTab] = useState('karbo');
+
+            const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+
+            const showToast = (message, type = 'success') => {
+                setToast({ show: true, message, type });
+                setTimeout(() => {
+                    setToast(prev => ({ ...prev, show: false }));
+                }, 3500);
+            };
+
+            const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+            const [isCreatingPeriod, setIsCreatingPeriod] = useState(false);
+            const [newPeriodName, setNewPeriodName] = useState('');
+
+            const [multiDateModal, setMultiDateModal] = useState({ isOpen: false, weekTarget: 'week1' });
+            const [modalMonth, setModalMonth] = useState(new Date(2026, 8, 1));
+            const [selectedModalDates, setSelectedModalDates] = useState([]);
+
+            const [editingPeriodId, setEditingPeriodId] = useState(null);
+            const [editingPeriodName, setEditingPeriodName] = useState('');
+
+            const [activeTab, setActiveTab] = useState('planner'); 
+            const [summarySubTab, setSummarySubTab] = useState('aggregate'); 
+            const [activeDayKey, setActiveDayKey] = useState('2026-09-01');
+
+            useEffect(() => {
+                if (currentUser?.role === 'guest') {
+                    setActiveTab('summary');
+                }
+            }, [currentUser]);
+
+            const activePeriod = periods.find(p => p.id === activePeriodId) || periods[0] || { id: '1', name: 'Periode 1', week1Dates: [], week2Dates: [] };
+            const week1Dates = activePeriod?.week1Dates || [];
+            const week2Dates = activePeriod?.week2Dates || [];
+            const allPeriodDates = [...week1Dates, ...week2Dates];
+
+            useEffect(() => {
+                const initFirebase = async () => {
+                    if (window.FirebaseServices) {
+                        const services = window.FirebaseServices;
+                        setFb(services);
+                        
+                        try {
+                            const { auth, signInAnonymously, signInWithCustomToken } = services;
+                            let userCred = null;
+                            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                                userCred = await signInWithCustomToken(auth, __initial_auth_token);
+                            } else {
+                                userCred = await signInAnonymously(auth);
+                            }
+                            setAuthUser(userCred.user);
+                        } catch (err) {
+                            console.error("Firebase auth error:", err);
+                            try {
+                                const userCred = await services.signInAnonymously(services.auth);
+                                setAuthUser(userCred.user);
+                            } catch (e) {
+                                console.error("Anonymous auth failed:", e);
+                            }
+                        } finally {
+                            setIsAuthenticating(false);
+                        }
+                    }
+                };
+
+                window.addEventListener('firebase-ready', initFirebase);
+                if (window.FirebaseServices) {
+                    initFirebase();
+                }
+
+                return () => window.removeEventListener('firebase-ready', initFirebase);
+            }, []);
+
+            useEffect(() => {
+                if (!fb || !authUser) return;
+                const { db, appId, doc, onSnapshot } = fb;
+
+                const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'userProfiles', authUser.uid);
+                const unsubscribeUser = onSnapshot(userDocRef, (docSnap) => {
+                    if (docSnap.exists()) {
+                        const profileData = docSnap.data();
+                        setCurrentUser(profileData);
+                    }
+                }, (err) => console.error("User profile snapshot error:", err));
+
+                const plannerDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'plannerData', 'main');
+                const unsubscribePlanner = onSnapshot(plannerDocRef, (docSnap) => {
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        if (data.accounts) setAccounts(data.accounts);
+                        if (data.periods) setPeriods(data.periods);
+                        if (data.menuData) setMenuData(data.menuData);
+                        if (data.masterIngredients) setMasterIngredients(data.masterIngredients);
+                        if (data.masterMenus) setMasterMenus(data.masterMenus);
+                        setCloudSynced(true);
+                    }
+                }, (err) => console.error("Planner data snapshot error:", err));
+
+                return () => {
+                    unsubscribeUser();
+                    unsubscribePlanner();
+                };
+            }, [fb, authUser]);
+
+            const saveToCloudState = async (updatedPeriods, updatedMenuData, updatedMasterIngredients, updatedMasterMenus, updatedAccounts) => {
+                if (!fb || !authUser || !isEditor) return;
+                const { db, appId, doc, setDoc } = fb;
+                const plannerDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'plannerData', 'main');
+
+                try {
+                    await setDoc(plannerDocRef, {
+                        accounts: updatedAccounts !== undefined ? updatedAccounts : accounts,
+                        periods: updatedPeriods !== undefined ? updatedPeriods : periods,
+                        menuData: updatedMenuData !== undefined ? updatedMenuData : menuData,
+                        masterIngredients: updatedMasterIngredients !== undefined ? updatedMasterIngredients : masterIngredients,
+                        masterMenus: updatedMasterMenus !== undefined ? updatedMasterMenus : masterMenus,
+                        lastUpdatedBy: currentUser?.name || authUser.uid,
+                        updatedAt: new Date().toISOString()
+                    }, { merge: true });
+                } catch (err) {
+                    console.error("Cloud save failed:", err);
+                    showToast("Gagal menyinkronkan data ke Cloud!", "error");
+                }
+            };
+
+            const handleCloudLogin = async (userProfile) => {
+                setCurrentUser(userProfile);
+                if (fb && authUser) {
+                    const { db, appId, doc, setDoc } = fb;
+                    const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'userProfiles', authUser.uid);
+                    try {
+                        await setDoc(userDocRef, {
+                            ...userProfile,
+                            updatedAt: new Date().toISOString()
+                        });
+                    } catch (err) {
+                        console.error("Failed to store user profile in cloud:", err);
+                    }
+                }
+            };
+
+            const handleSavePasswordChange = (e) => {
+                e.preventDefault();
+                const userKey = (currentUser?.name || '').toLowerCase();
+                const currentAcc = accounts[userKey];
+
+                if (!currentAcc || oldPassword !== currentAcc.password) {
+                    showToast("Password lama salah!", "error");
+                    return;
+                }
+                if (newPassword.length < 4) {
+                    showToast("Password baru minimal 4 karakter!", "error");
+                    return;
+                }
+                if (newPassword !== confirmPassword) {
+                    showToast("Konfirmasi password baru tidak cocok!", "error");
+                    return;
+                }
+
+                const updatedAccounts = {
+                    ...accounts,
+                    [userKey]: {
+                        ...currentAcc,
+                        password: newPassword
+                    }
+                };
+
+                setAccounts(updatedAccounts);
+                saveToCloudState(undefined, undefined, undefined, undefined, updatedAccounts);
+                setIsChangePasswordModalOpen(false);
+                setOldPassword('');
+                setNewPassword('');
+                setConfirmPassword('');
+                showToast("Password berhasil diperbarui!", "success");
+            };
+
+            const handleCreateNewEditor = (e) => {
+                e.preventDefault();
+                const trimmedUser = newEditorUsername.trim();
+                const userKey = trimmedUser.toLowerCase();
+
+                if (!trimmedUser || !newEditorPassword) return;
+
+                if (accounts[userKey]) {
+                    showToast(`Akun "${trimmedUser}" sudah ada!`, "error");
+                    return;
+                }
+
+                const updatedAccounts = {
+                    ...accounts,
+                    [userKey]: {
+                        username: trimmedUser,
+                        password: newEditorPassword,
+                        isSuperAdmin: false
+                    }
+                };
+
+                setAccounts(updatedAccounts);
+                saveToCloudState(undefined, undefined, undefined, undefined, updatedAccounts);
+                setNewEditorUsername('');
+                setNewEditorPassword('');
+                showToast(`Akun Editor "${trimmedUser}" berhasil dibuat!`, "success");
+            };
+
+            const handleResetUserPassword = (targetUsername, newPass) => {
+                const userKey = targetUsername.toLowerCase();
+                if (!accounts[userKey]) return;
+
+                const updatedAccounts = {
+                    ...accounts,
+                    [userKey]: {
+                        ...accounts[userKey],
+                        password: newPass
+                    }
+                };
+
+                setAccounts(updatedAccounts);
+                saveToCloudState(undefined, undefined, undefined, undefined, updatedAccounts);
+                setResetTargetUser(null);
+                setResetNewPassword('');
+                showToast(`Password untuk "${targetUsername}" berhasil direset!`, "success");
+            };
+
+            const addIngredient = (dateStr, catId, newItem) => {
+                if (!isEditor) return;
+                const periodData = menuData[activePeriodId] || {};
+                const dayData = periodData[dateStr] || {};
+                const currentList = dayData[catId] || [];
+
+                const itemWithId = { ...newItem, id: 'ing-' + Date.now() + '-' + Math.random().toString(36).substring(2, 5) };
+
+                const updatedMenuData = {
+                    ...menuData,
+                    [activePeriodId]: {
+                        ...periodData,
+                        [dateStr]: {
+                            ...dayData,
+                            [catId]: [...currentList, itemWithId]
+                        }
+                    }
+                };
+
+                setMenuData(updatedMenuData);
+                saveToCloudState(undefined, updatedMenuData);
+            };
+
+            const removeIngredient = (dateStr, catId, itemId) => {
+                if (!isEditor) return;
+                const periodData = menuData[activePeriodId] || {};
+                const dayData = periodData[dateStr] || {};
+                const currentList = dayData[catId] || [];
+
+                const updatedList = currentList.filter(item => item.id !== itemId);
+
+                const updatedMenuData = {
+                    ...menuData,
+                    [activePeriodId]: {
+                        ...periodData,
+                        [dateStr]: {
+                            ...dayData,
+                            [catId]: updatedList
+                        }
+                    }
+                };
+
+                setMenuData(updatedMenuData);
+                saveToCloudState(undefined, updatedMenuData);
+            };
+
+            const updateMenuName = (dateStr, catId, name) => {
+                if (!isEditor) return;
+                const periodData = menuData[activePeriodId] || {};
+                const dayData = periodData[dateStr] || {};
+                const currentNames = dayData.menuNames || {};
+
+                const updatedMenuData = {
+                    ...menuData,
+                    [activePeriodId]: {
+                        ...periodData,
+                        [dateStr]: {
+                            ...dayData,
+                            menuNames: {
+                                ...currentNames,
+                                [catId]: name
+                            }
+                        }
+                    }
+                };
+
+                setMenuData(updatedMenuData);
+                saveToCloudState(undefined, updatedMenuData);
+            };
+
+            const handleSaveToMaster = (catId, item) => {
+                if (!isEditor) return;
+                const currentMasterList = masterIngredients[catId] || [];
+                const itemWithId = { ...item, id: 'm-' + Date.now() };
+
+                const updatedMaster = {
+                    ...masterIngredients,
+                    [catId]: [...currentMasterList, itemWithId]
+                };
+
+                setMasterIngredients(updatedMaster);
+                saveToCloudState(undefined, undefined, updatedMaster);
+                showToast(`Bahan "${item.name}" disimpan ke Master Bahan!`, "success");
+            };
+
+            const handleSaveCurrentMenuToMaster = (dateStr, catId) => {
+                if (!isEditor) return;
+                const periodData = menuData[activePeriodId] || {};
+                const dayData = periodData[dateStr] || {};
+                const currentMenuName = dayData.menuNames?.[catId] || '';
+                const currentIngredients = dayData[catId] || [];
+
+                if (!currentMenuName.trim()) {
+                    showToast("Isi Nama Menu terlebih dahulu sebelum menyimpan!", "error");
+                    return;
+                }
+                if (currentIngredients.length === 0) {
+                    showToast("Tambahkan minimal 1 bahan makanan sebelum menyimpan resep!", "error");
+                    return;
+                }
+
+                const currentCategoryMenus = masterMenus[catId] || [];
+                const newPreset = {
+                    id: 'mm-' + Date.now(),
+                    name: currentMenuName.trim(),
+                    ingredients: currentIngredients.map(ing => ({
+                        name: ing.name,
+                        brand: ing.brand || 'N/A',
+                        amountText: ing.amountText
+                    }))
+                };
+
+                const updatedMasterMenus = {
+                    ...masterMenus,
+                    [catId]: [...currentCategoryMenus, newPreset]
+                };
+
+                setMasterMenus(updatedMasterMenus);
+                saveToCloudState(undefined, undefined, undefined, updatedMasterMenus);
+                showToast(`Resep "${currentMenuName}" berhasil disimpan ke Master Resep!`, "success");
+            };
+
+            const handleApplyMasterMenu = (dateStr, catId, masterMenuId) => {
+                if (!isEditor || !masterMenuId) return;
+                const categoryPresets = masterMenus[catId] || [];
+                const targetPreset = categoryPresets.find(m => m.id === masterMenuId);
+                if (!targetPreset) return;
+
+                const periodData = menuData[activePeriodId] || {};
+                const dayData = periodData[dateStr] || {};
+                const currentNames = dayData.menuNames || {};
+
+                const newIngredients = targetPreset.ingredients.map(ing => ({
+                    id: 'ing-' + Date.now() + '-' + Math.random().toString(36).substring(2, 5),
+                    name: ing.name,
+                    brand: ing.brand || 'N/A',
+                    amountText: ing.amountText
+                }));
+
+                const updatedMenuData = {
+                    ...menuData,
+                    [activePeriodId]: {
+                        ...periodData,
+                        [dateStr]: {
+                            ...dayData,
+                            menuNames: {
+                                ...currentNames,
+                                [catId]: targetPreset.name
+                            },
+                            [catId]: newIngredients
+                        }
+                    }
+                };
+
+                setMenuData(updatedMenuData);
+                saveToCloudState(undefined, updatedMenuData);
+                showToast(`Resep "${targetPreset.name}" berhasil dimuat!`, "success");
+            };
+
+            const handleCreatePeriod = (e) => {
+                e.preventDefault();
+                if (!newPeriodName.trim() || !isEditor) return;
+
+                const newP = {
+                    id: Date.now().toString(),
+                    name: newPeriodName.trim(),
+                    week1Dates: [],
+                    week2Dates: []
+                };
+
+                const updatedPeriods = [...periods, newP];
+                setPeriods(updatedPeriods);
+                setActivePeriodId(newP.id);
+                setNewPeriodName('');
+                setIsCreatingPeriod(false);
+                saveToCloudState(updatedPeriods);
+                showToast(`Periode "${newP.name}" berhasil dibuat!`, "success");
+            };
+
+            const handleSaveRenamePeriod = (periodId) => {
+                if (!editingPeriodName.trim() || !isEditor) return;
+                const updatedPeriods = periods.map(p => p.id === periodId ? { ...p, name: editingPeriodName.trim() } : p);
+                setPeriods(updatedPeriods);
+                setEditingPeriodId(null);
+                setEditingPeriodName('');
+                saveToCloudState(updatedPeriods);
+                showToast("Nama periode diperbarui!", "success");
+            };
+
+            const handleDeletePeriod = (periodId, e) => {
+                e.stopPropagation();
+                if (!isEditor || periods.length <= 1) return;
+                const updatedPeriods = periods.filter(p => p.id !== periodId);
+                setPeriods(updatedPeriods);
+                if (activePeriodId === periodId) {
+                    setActivePeriodId(updatedPeriods[0]?.id || '1');
+                }
+                saveToCloudState(updatedPeriods);
+                showToast("Periode berhasil dihapus!", "success");
+            };
+
+            const openMultiDateModal = (weekTarget) => {
+                if (!isEditor) return;
+                const currentDates = weekTarget === 'week1' ? week1Dates : week2Dates;
+                setSelectedModalDates([...currentDates]);
+                setMultiDateModal({ isOpen: true, weekTarget });
+            };
+
+            const getGloballyLockedDates = (currentPeriodId, currentWeekTarget) => {
+                const lockedSet = new Set();
+                periods.forEach(p => {
+                    const isSamePeriod = p.id === currentPeriodId;
+                    if (!isSamePeriod || currentWeekTarget !== 'week1') {
+                        (p.week1Dates || []).forEach(d => lockedSet.add(d));
+                    }
+                    if (!isSamePeriod || currentWeekTarget !== 'week2') {
+                        (p.week2Dates || []).forEach(d => lockedSet.add(d));
+                    }
+                });
+                return lockedSet;
+            };
+
+            const handleSaveMultiDates = () => {
+                if (!isEditor) return;
+                const { weekTarget } = multiDateModal;
+                const sorted = [...selectedModalDates].sort();
+
+                const updatedPeriods = periods.map(p => {
+                    if (p.id === activePeriodId) {
+                        return {
+                            ...p,
+                            [weekTarget === 'week1' ? 'week1Dates' : 'week2Dates']: sorted
+                        };
+                    }
+                    return p;
+                });
+
+                setPeriods(updatedPeriods);
+                setMultiDateModal({ isOpen: false, weekTarget: 'week1' });
+                saveToCloudState(updatedPeriods);
+
+                if (sorted.length > 0) {
+                    setActiveDayKey(sorted[0]);
+                }
+                showToast("Daftar tanggal berhasil diperbarui!", "success");
+            };
+
+            const handleRemoveDateFromPeriod = (dateStr, weekTarget) => {
+                if (!isEditor) return;
+                const currentDates = weekTarget === 'week1' ? week1Dates : week2Dates;
+                const updatedDates = currentDates.filter(d => d !== dateStr);
+
+                const updatedPeriods = periods.map(p => {
+                    if (p.id === activePeriodId) {
+                        return {
+                            ...p,
+                            [weekTarget === 'week1' ? 'week1Dates' : 'week2Dates']: updatedDates
+                        };
+                    }
+                    return p;
+                });
+
+                setPeriods(updatedPeriods);
+                saveToCloudState(updatedPeriods);
+            };
+
+            const openMasterModalWithCategory = (catId) => {
+                setActiveMasterTab(catId);
+                setIsMasterModalOpen(true);
+            };
+
+            const getDaySummary = (dateStr) => {
+                const periodData = menuData[activePeriodId] || {};
+                const dayData = periodData[dateStr] || {};
+                const summaryMap = {};
+
+                CATEGORIES.forEach(cat => {
+                    const catItems = dayData[cat.id] || [];
+                    catItems.forEach(item => {
+                        const key = (item.name + '___' + (item.brand || 'N/A')).toLowerCase();
+                        if (!summaryMap[key]) {
+                            summaryMap[key] = {
+                                name: item.name,
+                                brand: item.brand || 'N/A',
+                                categories: cat.name,
+                                amounts: [item.amountText]
+                            };
+                        } else {
+                            summaryMap[key].amounts.push(item.amountText);
+                            if (!summaryMap[key].categories.includes(cat.name)) {
+                                summaryMap[key].categories += ', ' + cat.name;
+                            }
+                        }
+                    });
+                });
+
+                return Object.values(summaryMap).map(item => ({
+                    name: item.name,
+                    brand: item.brand,
+                    categories: item.categories,
+                    totalAmount: item.amounts.join(' + ')
+                }));
+            };
+
+            if (!currentUser) {
+                return (
+                    <CloudLoginModal 
+                        onLogin={handleCloudLogin} 
+                        defaultName={authUser?.uid ? `Pengguna-${authUser.uid.substring(0, 4)}` : ''}
+                        isAuthenticating={isAuthenticating}
+                        accounts={accounts}
+                    />
+                );
+            }
+
+            return (
+                <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 relative">
+                    
+                    {/* Toast Notification */}
+                    {toast.show && (
+                        <div className={`fixed top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl border text-xs font-bold fade-in transition-all ${
+                            toast.type === 'error' 
+                                ? 'bg-red-600 text-white border-red-700' 
+                                : 'bg-slate-900 text-white border-slate-700'
+                        }`}>
+                            <i className={`ph-bold ${toast.type === 'error' ? 'ph-warning-circle text-lg text-red-200' : 'ph-check-circle text-lg text-emerald-400'}`}></i>
+                            <span>{toast.message}</span>
+                        </div>
+                    )}
+
+                    {/* Mobile Header Toggle */}
+                    <div className="md:hidden bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between sticky top-0 z-30">
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center text-white font-bold text-lg shadow-sm">
+                                <i className="ph-bold ph-bowl-food"></i>
+                            </div>
+                            <h1 className="font-bold text-slate-800 text-base">MBG Cloud Planner</h1>
+                        </div>
+                        <button 
+                            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                            className="p-2 rounded-lg text-slate-600 hover:bg-slate-100"
+                        >
+                            <i className={`ph-bold ${isSidebarOpen ? 'ph-x' : 'ph-list'} text-xl`}></i>
+                        </button>
+                    </div>
+
+                    {/* Sidebar Navigation */}
+                    <aside className={`
+                        fixed inset-y-0 left-0 z-20 w-80 bg-white border-r border-slate-200 flex flex-col transition-transform duration-300 ease-in-out md:static md:translate-x-0
+                        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+                    `}>
+                        <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center text-white font-bold text-xl shadow-md shadow-brand-500/20">
+                                    <i className="ph-bold ph-bowl-food"></i>
+                                </div>
+                                <div>
+                                    <h1 className="font-bold text-slate-900 text-sm tracking-tight">Perencana Menu MBG</h1>
+                                    <p className="text-[11px] text-slate-400 font-medium">Cloud Auth & Realtime Sync</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="px-4 pt-3">
+                            <div className="px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-between text-[11px]">
+                                <div className="flex items-center gap-1.5">
+                                    <span className={`w-2 h-2 rounded-full ${cloudSynced ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
+                                    <span className="font-semibold text-slate-700">{cloudSynced ? 'Terhubung ke Cloud' : 'Menyingkronkan...'}</span>
+                                </div>
+                                <i className="ph-bold ph-cloud-check text-brand-600 text-sm"></i>
+                            </div>
+                        </div>
+
+                        <div className="px-4 pt-2">
+                            <div className={`p-2.5 rounded-xl border flex flex-col gap-2 ${
+                                isEditor 
+                                    ? 'bg-emerald-50 border-emerald-200 text-emerald-900' 
+                                    : 'bg-amber-50 border-amber-200 text-amber-900'
+                            }`}>
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2 truncate">
+                                        <i className={`ph-bold ${isEditor ? 'ph-pencil-simple-line text-emerald-600' : 'ph-eye text-amber-600'} text-base shrink-0`}></i>
+                                        <div className="truncate">
+                                            <p className="text-xs font-extrabold truncate">{currentUser.name}</p>
+                                            <p className="text-[10px] opacity-80 font-semibold uppercase tracking-wider">
+                                                {isEditor ? (currentUser.isSuperAdmin || currentUser.name.toLowerCase() === 'addo' ? 'Super Admin / Editor' : 'Akses Editor') : 'Akses Tamu (Rekap Saja)'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button 
+                                        onClick={() => setCurrentUser(null)}
+                                        className="p-1 hover:bg-black/10 rounded transition-colors text-slate-600 shrink-0"
+                                        title="Ganti Peran / Keluar"
+                                    >
+                                        <i className="ph-bold ph-sign-out text-sm"></i>
+                                    </button>
+                                </div>
+
+                                {isEditor && (
+                                    <div className="flex items-center gap-1.5 pt-1.5 border-t border-emerald-200/60">
+                                        <button
+                                            onClick={() => setIsChangePasswordModalOpen(true)}
+                                            className="flex-1 text-[10px] font-bold py-1 px-2 rounded-lg bg-white hover:bg-emerald-100/60 text-emerald-800 border border-emerald-300 flex items-center justify-center gap-1 transition-colors shadow-2xs"
+                                        >
+                                            <i className="ph-bold ph-key text-xs"></i> Ubah Password
+                                        </button>
+                                        {(currentUser.isSuperAdmin || currentUser.name.toLowerCase() === 'addo') && (
+                                            <button
+                                                onClick={() => setIsManageAccountsModalOpen(true)}
+                                                className="flex-1 text-[10px] font-bold py-1 px-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white flex items-center justify-center gap-1 transition-colors shadow-2xs"
+                                            >
+                                                <i className="ph-bold ph-users-three text-xs"></i> Kelola Akun
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+                            
+                            {/* Periods Section */}
+                            <div>
+                                <div className="flex items-center justify-between mb-3">
+                                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                                        <i className="ph-bold ph-calendar-check text-brand-600"></i> Pilih Periode
+                                    </span>
+                                    {isEditor && (
+                                        <button 
+                                            onClick={() => setIsCreatingPeriod(true)}
+                                            className="text-xs text-brand-700 hover:text-brand-800 font-semibold flex items-center gap-1 bg-brand-50 hover:bg-brand-100 px-2 py-1 rounded transition-colors"
+                                        >
+                                            <i className="ph-bold ph-plus"></i> Periode Baru
+                                        </button>
+                                    )}
+                                </div>
+
+                                {isCreatingPeriod && isEditor && (
+                                    <form onSubmit={handleCreatePeriod} className="mb-3 bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2 fade-in">
+                                        <input 
+                                            type="text" 
+                                            placeholder="Nama Periode (Cth: Periode 2)" 
+                                            value={newPeriodName}
+                                            onChange={e => setNewPeriodName(e.target.value)}
+                                            className="w-full text-xs px-2.5 py-1.5 rounded border border-slate-300 bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
+                                            autoFocus
+                                            required
+                                        />
+                                        <div className="flex gap-2 justify-end">
+                                            <button 
+                                                type="button" 
+                                                onClick={() => setIsCreatingPeriod(false)}
+                                                className="px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-200 rounded font-medium"
+                                            >
+                                                Batal
+                                            </button>
+                                            <button 
+                                                type="submit" 
+                                                className="px-2.5 py-1 text-xs bg-brand-600 text-white rounded font-medium hover:bg-brand-700"
+                                            >
+                                                Simpan
+                                            </button>
+                                        </div>
+                                    </form>
+                                )}
+
+                                <div className="space-y-1.5">
+                                    {periods.map(period => {
+                                        const pW1 = period.week1Dates || [];
+                                        const pW2 = period.week2Dates || [];
+                                        const totalDays = pW1.length + pW2.length;
+                                        const isEditingThis = editingPeriodId === period.id;
+
+                                        if (isEditingThis && isEditor) {
+                                            return (
+                                                <form key={period.id} onSubmit={(e) => { e.preventDefault(); handleSaveRenamePeriod(period.id); }} className="flex items-center gap-1.5 p-1.5 bg-brand-50 rounded-xl border border-brand-300">
+                                                    <input 
+                                                        type="text" 
+                                                        value={editingPeriodName} 
+                                                        onChange={e => setEditingPeriodName(e.target.value)}
+                                                        className="w-full text-xs px-2 py-1 rounded border border-brand-300 focus:outline-none focus:ring-1 focus:ring-brand-500 bg-white font-medium"
+                                                        autoFocus
+                                                    />
+                                                    <button type="submit" className="p-1 text-brand-700 hover:bg-brand-200 rounded font-bold" title="Simpan">
+                                                        <i className="ph-bold ph-check"></i>
+                                                    </button>
+                                                    <button type="button" onClick={() => setEditingPeriodId(null)} className="p-1 text-slate-400 hover:bg-slate-200 rounded" title="Batal">
+                                                        <i className="ph-bold ph-x"></i>
+                                                    </button>
+                                                </form>
+                                            );
+                                        }
+
+                                        return (
+                                            <div 
+                                                key={period.id}
+                                                onClick={() => { setActivePeriodId(period.id); setIsSidebarOpen(false); }}
+                                                className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-semibold flex items-center justify-between cursor-pointer transition-all ${
+                                                    activePeriodId === period.id 
+                                                        ? 'bg-brand-600 text-white shadow-md shadow-brand-600/20' 
+                                                        : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200/60'
+                                                }`}
+                                            >
+                                                <div className="truncate flex items-center gap-2">
+                                                    <i className={`ph-bold ${activePeriodId === period.id ? 'ph-calendar-star' : 'ph-calendar'} text-sm`}></i>
+                                                    <span className="truncate">{period.name}</span>
+                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activePeriodId === period.id ? 'bg-brand-700 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                                                        {totalDays} hari
+                                                    </span>
+                                                </div>
+                                                {isEditor && (
+                                                    <div className="flex items-center gap-1">
+                                                        <button 
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setEditingPeriodId(period.id);
+                                                                setEditingPeriodName(period.name);
+                                                            }}
+                                                            className={`p-1 rounded hover:opacity-100 opacity-60 transition-opacity ${activePeriodId === period.id ? 'hover:bg-brand-700 text-white' : 'hover:bg-slate-200 text-slate-500'}`}
+                                                            title="Ubah Nama Periode"
+                                                        >
+                                                            <i className="ph-bold ph-pencil-simple"></i>
+                                                        </button>
+                                                        {periods.length > 1 && (
+                                                            <button 
+                                                                onClick={(e) => handleDeletePeriod(period.id, e)}
+                                                                className={`p-1 rounded hover:opacity-100 opacity-60 transition-opacity ${activePeriodId === period.id ? 'hover:bg-brand-700 text-white' : 'hover:bg-slate-200 text-slate-500'}`}
+                                                                title="Hapus Periode"
+                                                            >
+                                                                <i className="ph-bold ph-trash"></i>
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Master Bahan Shortcut (Editor Only) */}
+                            {isEditor && (
+                                <div className="pt-3 border-t border-slate-100">
+                                    <button
+                                        onClick={() => openMasterModalWithCategory('karbo')}
+                                        className="w-full text-xs font-bold py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 flex items-center justify-between transition-colors shadow-2xs"
+                                    >
+                                        <span className="flex items-center gap-2">
+                                            <i className="ph-bold ph-bookmarks text-brand-600 text-base"></i> Kelola Master Bahan
+                                        </span>
+                                        <i className="ph-bold ph-caret-right text-slate-400"></i>
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Date Manager for Active Period (Editor Only) */}
+                            {isEditor && (
+                                <div className="pt-4 border-t border-slate-100">
+                                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-3 flex items-center gap-1.5">
+                                        <i className="ph-bold ph-calendar-plus text-brand-600"></i> Kelola Tanggal ({activePeriod.name})
+                                    </span>
+
+                                    <div className="space-y-4 max-h-[380px] overflow-y-auto pr-1">
+                                        {/* Minggu 1 Section */}
+                                        <div className="space-y-1.5 bg-slate-50/70 p-2.5 rounded-xl border border-slate-200/70">
+                                            <div className="flex items-center justify-between text-[11px] font-bold text-brand-800 bg-brand-50/90 px-2.5 py-1 rounded-lg border border-brand-200/70">
+                                                <span className="flex items-center gap-1">
+                                                    <i className="ph-bold ph-number-circle-one text-brand-600"></i> Minggu 1
+                                                </span>
+                                                <span className="text-[10px] text-brand-700 font-semibold">{week1Dates.length} Hari</span>
+                                            </div>
+
+                                            {week1Dates.length === 0 ? (
+                                                <p className="text-[11px] text-slate-400 italic px-1 py-1">Belum ada tanggal di Minggu 1</p>
+                                            ) : (
+                                                week1Dates.map((dateStr, idx) => (
+                                                    <div key={`w1-${dateStr}`} className="flex items-center justify-between bg-white border border-slate-200/60 px-2.5 py-1.5 rounded-lg text-xs shadow-2xs">
+                                                        <div className="flex items-center gap-2 truncate">
+                                                            <span className="font-bold text-brand-700 bg-brand-100/80 px-1.5 py-0.5 rounded text-[10px]">#{idx + 1}</span>
+                                                            <span className="text-slate-700 truncate font-medium">{formatDate(dateStr)}</span>
+                                                        </div>
+                                                        <button 
+                                                            onClick={() => handleRemoveDateFromPeriod(dateStr, 'week1')}
+                                                            className="text-slate-400 hover:text-red-600 p-1 transition-colors"
+                                                            title="Hapus Tanggal"
+                                                        >
+                                                            <i className="ph-bold ph-x"></i>
+                                                        </button>
+                                                    </div>
+                                                ))
+                                            )}
+
+                                            <div className="pt-2 border-t border-slate-200/50 mt-1 space-y-1.5">
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => openMultiDateModal('week1')}
+                                                    className="w-full text-xs font-bold py-1.5 px-2.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white flex items-center justify-center gap-1.5 transition-colors shadow-2xs"
+                                                >
+                                                    <i className="ph-bold ph-calendar-plus text-sm"></i> Pilih Tanggal (M1)
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Minggu 2 Section */}
+                                        <div className="space-y-1.5 bg-slate-50/70 p-2.5 rounded-xl border border-slate-200/70">
+                                            <div className="flex items-center justify-between text-[11px] font-bold text-blue-800 bg-blue-50/90 px-2.5 py-1 rounded-lg border border-blue-200/70">
+                                                <span className="flex items-center gap-1">
+                                                    <i className="ph-bold ph-number-circle-two text-blue-600"></i> Minggu 2
+                                                </span>
+                                                <span className="text-[10px] text-blue-700 font-semibold">{week2Dates.length} Hari</span>
+                                            </div>
+
+                                            {week2Dates.length === 0 ? (
+                                                <p className="text-[11px] text-slate-400 italic px-1 py-1">Belum ada tanggal di Minggu 2</p>
+                                            ) : (
+                                                week2Dates.map((dateStr, idx) => (
+                                                    <div key={`w2-${dateStr}`} className="flex items-center justify-between bg-white border border-slate-200/60 px-2.5 py-1.5 rounded-lg text-xs shadow-2xs">
+                                                        <div className="flex items-center gap-2 truncate">
+                                                            <span className="font-bold text-blue-700 bg-blue-100/80 px-1.5 py-0.5 rounded text-[10px]">#{week1Dates.length + idx + 1}</span>
+                                                            <span className="text-slate-700 truncate font-medium">{formatDate(dateStr)}</span>
+                                                        </div>
+                                                        <button 
+                                                            onClick={() => handleRemoveDateFromPeriod(dateStr, 'week2')}
+                                                            className="text-slate-400 hover:text-red-600 p-1 transition-colors"
+                                                            title="Hapus Tanggal"
+                                                        >
+                                                            <i className="ph-bold ph-x"></i>
+                                                        </button>
+                                                    </div>
+                                                ))
+                                            )}
+
+                                            <div className="pt-2 border-t border-slate-200/50 mt-1 space-y-1.5">
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => openMultiDateModal('week2')}
+                                                    className="w-full text-xs font-bold py-1.5 px-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center gap-1.5 transition-colors shadow-2xs"
+                                                >
+                                                    <i className="ph-bold ph-calendar-plus text-sm"></i> Pilih Tanggal (M2)
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                        </div>
+
+                        <div className="p-4 border-t border-slate-100 text-center">
+                            <span className="text-[11px] text-slate-400 font-medium">MBG Menu Planner • Cloud Auth</span>
+                        </div>
+                    </aside>
+
+                    {/* Main Workspace Area */}
+                    <main className="flex-1 flex flex-col min-w-0 overflow-y-auto h-screen">
+                        
+                        <header className="bg-white border-b border-slate-200 px-6 py-4 sticky top-0 z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-2xs">
+                            <div>
+                                <span className="text-xs font-bold text-brand-700 uppercase tracking-wider bg-brand-50 px-2 py-0.5 rounded border border-brand-200">
+                                    {activePeriod.name}
+                                </span>
+                                <h2 className="text-lg font-extrabold text-slate-800 tracking-tight mt-1">
+                                    {activeTab === 'planner' ? 'Perencanaan Menu Harian' : 'Rekapitulasi Kebutuhan Bahan'}
+                                </h2>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+                                    {currentUser?.role !== 'guest' && (
+                                        <button 
+                                            onClick={() => setActiveTab('planner')}
+                                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                                                activeTab === 'planner' 
+                                                    ? 'bg-white text-brand-700 shadow-sm' 
+                                                    : 'text-slate-600 hover:text-slate-900'
+                                            }`}
+                                        >
+                                            <i className="ph-bold ph-calendar-blank"></i> Perencana Menu
+                                        </button>
+                                    )}
+                                    <button 
+                                        onClick={() => setActiveTab('summary')}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                                            activeTab === 'summary' 
+                                                ? 'bg-white text-brand-700 shadow-sm' 
+                                                : 'text-slate-600 hover:text-slate-900'
+                                        }`}
+                                    >
+                                        <i className="ph-bold ph-receipt"></i> Rekap Pesanan
+                                    </button>
+                                </div>
+                            </div>
+                        </header>
+
+                        <div className="p-6 max-w-6xl w-full mx-auto flex-1">
+                            
+                            {/* PLANNER VIEW */}
+                            {activeTab === 'planner' && (
+                                <div className="space-y-6 fade-in pb-12">
+                                    {(() => {
+                                        const isWeek2Active = week2Dates.includes(activeDayKey);
+                                        const selectedPlannerWeek = isWeek2Active ? 'week2' : 'week1';
+                                        const currentWeekDates = selectedPlannerWeek === 'week2' ? week2Dates : week1Dates;
+
+                                        return (
+                                            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                                <div className="flex items-center gap-2">
+                                                    <i className="ph-bold ph-calendar-check text-brand-600 text-lg"></i>
+                                                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Pilih Tanggal Pengerjaan:</span>
+                                                </div>
+                                                
+                                                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+                                                    <select 
+                                                        value={selectedPlannerWeek} 
+                                                        onChange={(e) => {
+                                                            const targetWeek = e.target.value;
+                                                            if (targetWeek === 'week1' && week1Dates.length > 0) {
+                                                                setActiveDayKey(week1Dates[0]);
+                                                            } else if (targetWeek === 'week2' && week2Dates.length > 0) {
+                                                                setActiveDayKey(week2Dates[0]);
+                                                            }
+                                                        }}
+                                                        className="text-xs font-semibold px-3 py-2 rounded-lg border border-slate-300 bg-slate-50 text-slate-800 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                                                    >
+                                                        <option value="week1">Minggu 1 ({week1Dates.length} Hari)</option>
+                                                        <option value="week2" disabled={week2Dates.length === 0}>
+                                                            Minggu 2 ({week2Dates.length} Hari)
+                                                        </option>
+                                                    </select>
+
+                                                    <select 
+                                                        value={activeDayKey} 
+                                                        onChange={e => setActiveDayKey(e.target.value)}
+                                                        className="text-xs font-semibold px-3 py-2 rounded-lg border border-slate-300 bg-slate-50 text-slate-800 focus:outline-none focus:ring-1 focus:ring-brand-500 min-w-[240px]"
+                                                    >
+                                                        {allPeriodDates.length === 0 ? (
+                                                            <option value="">Tidak ada tanggal dalam periode ini</option>
+                                                        ) : currentWeekDates.length === 0 ? (
+                                                            <option value="">Tidak ada tanggal di minggu ini</option>
+                                                        ) : (
+                                                            currentWeekDates.map((dateStr, idx) => (
+                                                                <option key={dateStr} value={dateStr}>
+                                                                    Hari #{selectedPlannerWeek === 'week2' ? week1Dates.length + idx + 1 : idx + 1} - {formatDate(dateStr)}
+                                                                </option>
+                                                            ))
+                                                        )}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {allPeriodDates.length === 0 || !activeDayKey ? (
+                                        <div className="bg-white rounded-xl border border-dashed border-slate-300 p-12 text-center text-slate-400">
+                                            <i className="ph-bold ph-calendar-x text-4xl mb-2 text-slate-300"></i>
+                                            <p className="font-medium text-sm">Belum ada tanggal yang dipilih atau tersedia di periode ini.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-6">
+                                            {(() => {
+                                                const inW1 = week1Dates.indexOf(activeDayKey);
+                                                const inW2 = week2Dates.indexOf(activeDayKey);
+                                                const isW2 = inW2 !== -1;
+                                                const dayNumber = isW2 ? week1Dates.length + inW2 + 1 : inW1 + 1;
+                                                const weekText = isW2 ? 'Minggu 2' : 'Minggu 1';
+
+                                                return (
+                                                    <div className="bg-brand-50 border border-brand-200 rounded-xl px-4 py-3 flex items-center justify-between flex-wrap gap-2">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="bg-brand-600 text-white text-xs font-bold px-2.5 py-1 rounded-md shadow-2xs">
+                                                                Hari #{dayNumber > 0 ? dayNumber : 1} • {weekText}
+                                                            </span>
+                                                            <h3 className="font-bold text-brand-900 text-sm">{formatDate(activeDayKey)}</h3>
+                                                        </div>
+                                                        {!isEditor && (
+                                                            <span className="text-xs font-bold text-blue-700 bg-blue-100 px-2.5 py-1 rounded-full border border-blue-200 flex items-center gap-1">
+                                                                <i className="ph-bold ph-eye"></i> Mode Lihat (Read-Only)
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })()}
+
+                                            <div className="grid grid-cols-1 gap-6">
+                                                {CATEGORIES.map(cat => {
+                                                    const periodData = menuData[activePeriodId] || {};
+                                                    const dayData = periodData[activeDayKey] || {};
+                                                    const catItems = dayData[cat.id] || [];
+                                                    const currentMenuName = dayData.menuNames?.[cat.id] || '';
+
+                                                    return (
+                                                        <div key={cat.id} className={`bg-white rounded-xl border ${cat.border} shadow-2xs overflow-hidden`}>
+                                                            <div className={`${cat.bg} px-5 py-3 border-b ${cat.border} flex items-center justify-between`}>
+                                                                <div className={`font-bold ${cat.color} text-sm flex items-center gap-2`}>
+                                                                    <i className={`ph-bold ${cat.icon} text-base`}></i> {cat.name}
+                                                                </div>
+                                                                <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${cat.bg} ${cat.color} border ${cat.border}`}>
+                                                                    {catItems.length} item bahan
+                                                                </span>
+                                                            </div>
+
+                                                            <div className="bg-slate-50/80 border-b border-slate-200/60 px-4 py-3 space-y-2">
+                                                                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+                                                                    <div className="flex items-center gap-2 flex-1">
+                                                                        <i className="ph-bold ph-cooking-pot text-brand-600 text-base shrink-0"></i>
+                                                                        <label className="text-xs font-bold text-slate-700 shrink-0">Nama Menu:</label>
+                                                                        {isEditor ? (
+                                                                            <input 
+                                                                                type="text" 
+                                                                                placeholder="Contoh: Nasi Putih Premium"
+                                                                                value={currentMenuName}
+                                                                                onChange={e => updateMenuName(activeDayKey, cat.id, e.target.value)}
+                                                                                className="w-full text-xs px-3 py-1.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-500 bg-white font-medium text-slate-800 shadow-2xs"
+                                                                            />
+                                                                        ) : (
+                                                                            <span className="font-extrabold text-xs text-slate-800 bg-white px-3 py-1.5 rounded-lg border border-slate-200 w-full block">
+                                                                                {currentMenuName || 'Belum diisi'}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                    {isEditor && (
+                                                                        <button 
+                                                                            type="button"
+                                                                            onClick={() => handleSaveCurrentMenuToMaster(activeDayKey, cat.id)}
+                                                                            className="text-[11px] font-bold text-brand-800 hover:text-brand-900 bg-brand-100 hover:bg-brand-200 px-2.5 py-1.5 rounded-lg border border-brand-300 transition-colors flex items-center justify-center gap-1.5 shrink-0 shadow-2xs"
+                                                                        >
+                                                                            <i className="ph-bold ph-bookmark-simple text-sm text-brand-600"></i> Simpan ke Master Resep
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+
+                                                                {isEditor && (
+                                                                    <div className="flex items-center gap-2 text-xs bg-white p-2 rounded-lg border border-slate-200/80">
+                                                                        <i className="ph-bold ph-book-open text-brand-600 text-sm shrink-0"></i>
+                                                                        <span className="font-bold text-slate-600 shrink-0 text-[11px]">Pilih Resep Tersimpan:</span>
+                                                                        <select 
+                                                                            onChange={(e) => {
+                                                                                handleApplyMasterMenu(activeDayKey, cat.id, e.target.value);
+                                                                                e.target.value = '';
+                                                                            }}
+                                                                            defaultValue=""
+                                                                            className="w-full text-xs px-2.5 py-1 rounded border border-slate-300 bg-slate-50 font-medium focus:outline-none focus:ring-1 focus:ring-brand-500 truncate"
+                                                                        >
+                                                                            <option value="" disabled>-- Muat Paket Menu & Otomatis Isi Bahan --</option>
+                                                                            {(masterMenus[cat.id] || []).map(m => (
+                                                                                <option key={m.id} value={m.id}>
+                                                                                    {m.name} ({m.ingredients.length} jenis bahan)
+                                                                                </option>
+                                                                            ))}
+                                                                        </select>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+
+                                                            <div className="p-4 space-y-3">
+                                                                {catItems.length === 0 ? (
+                                                                    <p className="text-xs text-slate-400 italic py-1">Belum ada bahan makanan ditambahkan.</p>
+                                                                ) : (
+                                                                    <div className="space-y-2">
+                                                                        {catItems.map(item => (
+                                                                            <div key={item.id} className="bg-slate-50 border border-slate-200/80 rounded-lg p-2.5 flex items-center justify-between text-xs">
+                                                                                <div className="flex items-center gap-3">
+                                                                                    <span className="font-bold text-slate-800">{item.name}</span>
+                                                                                    {item.brand && item.brand !== 'N/A' && (
+                                                                                        <span className="bg-slate-200/70 text-slate-600 px-2 py-0.5 rounded text-[11px] font-medium">
+                                                                                            {item.brand}
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                                <div className="flex items-center gap-3">
+                                                                                    <span className="font-bold text-brand-700 bg-brand-50 px-2 py-1 rounded border border-brand-200">
+                                                                                        {item.amountText}
+                                                                                    </span>
+                                                                                    {isEditor && (
+                                                                                        <button 
+                                                                                            onClick={() => removeIngredient(activeDayKey, cat.id, item.id)}
+                                                                                            className="text-slate-400 hover:text-red-600 p-1 transition-colors"
+                                                                                            title="Hapus"
+                                                                                        >
+                                                                                            <i className="ph-bold ph-trash text-sm"></i>
+                                                                                        </button>
+                                                                                    )}
+                                                                                </div>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+
+                                                                <IngredientForm 
+                                                                    date={activeDayKey} 
+                                                                    categoryId={cat.id} 
+                                                                    onAdd={addIngredient} 
+                                                                    masterIngredients={masterIngredients[cat.id] || []}
+                                                                    onSaveToMaster={handleSaveToMaster}
+                                                                    onOpenMasterModal={openMasterModalWithCategory}
+                                                                    isEditor={isEditor}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* REKAP PESANAN VIEW */}
+                            {activeTab === 'summary' && (
+                                <div className="space-y-6 fade-in pb-12">
+                                    <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200 w-fit">
+                                        <button
+                                            onClick={() => setSummarySubTab('aggregate')}
+                                            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all ${
+                                                summarySubTab === 'aggregate'
+                                                    ? 'bg-white text-brand-700 shadow-xs'
+                                                    : 'text-slate-600 hover:text-slate-900'
+                                            }`}
+                                        >
+                                            <i className="ph-bold ph-calculator text-sm"></i> Total Bahan Harian
+                                        </button>
+                                        <button
+                                            onClick={() => setSummarySubTab('categories')}
+                                            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all ${
+                                                summarySubTab === 'categories'
+                                                    ? 'bg-white text-brand-700 shadow-xs'
+                                                    : 'text-slate-600 hover:text-slate-900'
+                                            }`}
+                                        >
+                                            <i className="ph-bold ph-list-dashes text-sm"></i> Rincian Per Kategori Menu
+                                        </button>
+                                    </div>
+
+                                    {allPeriodDates.length === 0 ? (
+                                        <div className="bg-white rounded-xl border border-dashed border-slate-300 p-12 text-center text-slate-400">
+                                            Belum ada tanggal yang dijadwalkan dalam periode ini.
+                                        </div>
+                                    ) : (
+                                        (() => {
+                                            const renderDailyAggregates = (dates, startIdx, weekTitle, weekBadgeStyle, weekBg) => (
+                                                <div className="space-y-4 mb-6">
+                                                    <div className={`flex items-center justify-between ${weekBg} border border-slate-200/80 px-3.5 py-2 rounded-lg`}>
+                                                        <span className={`text-xs font-bold ${weekBadgeStyle} flex items-center gap-1.5`}>
+                                                            <i className="ph-bold ph-calendar-blank text-sm"></i> {weekTitle} ({dates.length} Hari)
+                                                        </span>
+                                                    </div>
+                                                    {dates.map((dateStr, idx) => {
+                                                        const globalIdx = startIdx + idx;
+                                                        const daySummary = getDaySummary(dateStr);
+                                                        const periodData = menuData[activePeriodId] || {};
+                                                        const dayData = periodData[dateStr] || {};
+                                                        const menuNamesObj = dayData.menuNames || {};
+                                                        const plannedMenus = CATEGORIES
+                                                            .map(c => menuNamesObj[c.id])
+                                                            .filter(Boolean);
+
+                                                        return (
+                                                            <div key={`agg-${dateStr}`} className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+                                                                <div className="bg-brand-50/70 px-5 py-3 border-b border-brand-200 flex items-center justify-between flex-wrap gap-2">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="bg-brand-600 text-white text-xs font-bold px-2 py-0.5 rounded">
+                                                                            Hari #{globalIdx + 1}
+                                                                        </span>
+                                                                        <span className="font-bold text-brand-900 text-sm">{formatDate(dateStr)}</span>
+                                                                    </div>
+                                                                    <span className="text-xs text-brand-700 font-semibold">
+                                                                        {daySummary.length} jenis bahan
+                                                                    </span>
+                                                                </div>
+
+                                                                {plannedMenus.length > 0 && (
+                                                                    <div className="bg-slate-50 border-b border-slate-200/60 px-5 py-2 flex items-center gap-2 text-xs overflow-x-auto">
+                                                                        <span className="font-bold text-slate-600 flex items-center gap-1 shrink-0">
+                                                                            <i className="ph-bold ph-cooking-pot text-brand-600"></i> Menu Hari Ini:
+                                                                        </span>
+                                                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                                                            {plannedMenus.map((mName, mIdx) => (
+                                                                                <span key={mIdx} className="bg-white border border-slate-200 text-slate-700 px-2 py-0.5 rounded-full text-[11px] font-semibold shadow-2xs">
+                                                                                    {mName}
+                                                                                </span>
+                                                                            ))}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+
+                                                                <div className="p-4">
+                                                                    {daySummary.length > 0 ? (
+                                                                        <div className="overflow-x-auto rounded-lg border border-slate-200">
+                                                                            <table className="w-full text-left text-xs whitespace-nowrap">
+                                                                                <thead className="bg-slate-100/80 text-slate-600 border-b border-slate-200 uppercase tracking-wider text-[10px]">
+                                                                                    <tr>
+                                                                                        <th className="px-4 py-2">Nama Bahan</th>
+                                                                                        <th className="px-4 py-2">Brand</th>
+                                                                                        <th className="px-4 py-2">Kategori</th>
+                                                                                        <th className="px-4 py-2 text-right text-brand-700">Total Kebutuhan</th>
+                                                                                    </tr>
+                                                                                </thead>
+                                                                                <tbody className="divide-y divide-slate-100 bg-white">
+                                                                                    {daySummary.map((item, aIdx) => (
+                                                                                        <tr key={aIdx} className="hover:bg-slate-50">
+                                                                                            <td className="px-4 py-2 font-bold text-slate-800">{item.name}</td>
+                                                                                            <td className="px-4 py-2 text-slate-500">{item.brand}</td>
+                                                                                            <td className="px-4 py-2">
+                                                                                                <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200">
+                                                                                                    {item.categories}
+                                                                                                </span>
+                                                                                            </td>
+                                                                                            <td className="px-4 py-2 text-right font-black text-brand-700 bg-brand-50/30">
+                                                                                                {item.totalAmount}
+                                                                                            </td>
+                                                                                        </tr>
+                                                                                    ))}
+                                                                                </tbody>
+                                                                            </table>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <p className="text-xs text-slate-400 italic text-center py-2">Belum ada pesanan bahan dicatat.</p>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            );
+
+                                            const renderCategoryBreakdown = (dates, startIdx, weekTitle, weekBadgeStyle, weekBg) => (
+                                                <div className="space-y-4 mb-6">
+                                                    <div className={`flex items-center justify-between ${weekBg} border border-slate-200/80 px-3.5 py-2 rounded-lg`}>
+                                                        <span className={`text-xs font-bold ${weekBadgeStyle} flex items-center gap-1.5`}>
+                                                            <i className="ph-bold ph-calendar-blank text-sm"></i> {weekTitle} ({dates.length} Hari)
+                                                        </span>
+                                                    </div>
+                                                    {dates.map((dateStr, idx) => {
+                                                        const globalIdx = startIdx + idx;
+                                                        const periodData = menuData[activePeriodId] || {};
+                                                        const dayData = periodData[dateStr] || {};
+
+                                                        return (
+                                                            <div key={`cat-${dateStr}`} className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+                                                                <div className="bg-slate-100 px-5 py-3 border-b border-slate-200 flex items-center justify-between">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="bg-slate-800 text-white text-xs font-bold px-2 py-0.5 rounded">
+                                                                            Hari #{globalIdx + 1}
+                                                                        </span>
+                                                                        <span className="font-bold text-slate-800 text-sm">{formatDate(dateStr)}</span>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                                    {CATEGORIES.map(cat => {
+                                                                        const catItems = dayData[cat.id] || [];
+                                                                        const dishName = dayData.menuNames?.[cat.id] || '';
+
+                                                                        return (
+                                                                            <div key={cat.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50/50">
+                                                                                <div className="flex items-center justify-between pb-2 border-b border-slate-200 mb-2">
+                                                                                    <span className={`text-xs font-bold ${cat.color} flex items-center gap-1.5`}>
+                                                                                        <i className={`ph-bold ${cat.icon}`}></i> {cat.name}
+                                                                                    </span>
+                                                                                    {dishName && (
+                                                                                        <span className="text-[11px] font-extrabold bg-white border border-slate-200 px-2 py-0.5 rounded-full text-slate-700 shadow-2xs">
+                                                                                            {dishName}
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+
+                                                                                {catItems.length === 0 ? (
+                                                                                    <p className="text-[11px] text-slate-400 italic">Belum ada bahan</p>
+                                                                                ) : (
+                                                                                    <div className="space-y-1">
+                                                                                        {catItems.map(item => (
+                                                                                            <div key={item.id} className="flex items-center justify-between text-xs py-0.5">
+                                                                                                <span className="text-slate-700 font-medium">
+                                                                                                    {item.name} {item.brand && item.brand !== 'N/A' ? `(${item.brand})` : ''}
+                                                                                                </span>
+                                                                                                <span className="font-bold text-brand-700">{item.amountText}</span>
+                                                                                            </div>
+                                                                                        ))}
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            );
+
+                                            return (
+                                                <div className="space-y-6">
+                                                    {summarySubTab === 'aggregate' && (
+                                                        <div className="fade-in">
+                                                            {week1Dates.length > 0 && renderDailyAggregates(week1Dates, 0, 'Minggu 1', 'text-brand-800', 'bg-brand-50/80')}
+                                                            {week2Dates.length > 0 && renderDailyAggregates(week2Dates, week1Dates.length, 'Minggu 2', 'text-blue-800', 'bg-blue-50/80')}
+                                                        </div>
+                                                    )}
+
+                                                    {summarySubTab === 'categories' && (
+                                                        <div className="fade-in">
+                                                            {week1Dates.length > 0 && renderCategoryBreakdown(week1Dates, 0, 'Minggu 1', 'text-brand-800', 'bg-brand-50/80')}
+                                                            {week2Dates.length > 0 && renderCategoryBreakdown(week2Dates, week1Dates.length, 'Minggu 2', 'text-blue-800', 'bg-blue-50/80')}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()
+                                    )}
+                                </div>
+                            )}
+
+                        </div>
+                    </main>
+
+                    {}
+                    {/* Multi-Date Picker Modal */}
+                    {multiDateModal.isOpen && (
+                        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 fade-in">
+                            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden">
+                                <div className="p-4 bg-brand-600 text-white flex items-center justify-between">
+                                    <h3 className="font-extrabold text-sm flex items-center gap-2">
+                                        <i className="ph-bold ph-calendar-plus text-base"></i> Pilih Tanggal ({multiDateModal.weekTarget === 'week1' ? 'Minggu 1' : 'Minggu 2'})
+                                    </h3>
+                                    <button onClick={() => setMultiDateModal({ isOpen: false, weekTarget: 'week1' })} className="p-1 rounded-lg hover:bg-white/10 transition-colors">
+                                        <i className="ph-bold ph-x text-base"></i>
+                                    </button>
+                                </div>
+
+                                <div className="p-4 space-y-4">
+                                    <div className="flex items-center justify-between bg-slate-100 p-2 rounded-xl">
+                                        <button 
+                                            onClick={() => setModalMonth(new Date(modalMonth.getFullYear(), modalMonth.getMonth() - 1, 1))}
+                                            className="p-1.5 hover:bg-white rounded-lg text-slate-700 transition-colors"
+                                        >
+                                            <i className="ph-bold ph-caret-left"></i>
+                                        </button>
+                                        <span className="text-xs font-extrabold text-slate-800">
+                                            {modalMonth.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
+                                        </span>
+                                        <button 
+                                            onClick={() => setModalMonth(new Date(modalMonth.getFullYear(), modalMonth.getMonth() + 1, 1))}
+                                            className="p-1.5 hover:bg-white rounded-lg text-slate-700 transition-colors"
+                                        >
+                                            <i className="ph-bold ph-caret-right"></i>
+                                        </button>
+                                    </div>
+
+                                    {/* Workdays Shortcut Button */}
+                                    <button 
+                                        type="button"
+                                        onClick={() => {
+                                            const yr = modalMonth.getFullYear();
+                                            const mo = modalMonth.getMonth();
+                                            const daysInMo = new Date(yr, mo + 1, 0).getDate();
+                                            const workdays = [];
+                                            const globallyLocked = getGloballyLockedDates(activePeriodId, multiDateModal.weekTarget);
+
+                                            for (let d = 1; d <= daysInMo; d++) {
+                                                const dateObj = new Date(yr, mo, d);
+                                                const dayOfWeek = dateObj.getDay();
+                                                const dateStr = yr + '-' + String(mo + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+                                                if (dayOfWeek >= 1 && dayOfWeek <= 5 && !globallyLocked.has(dateStr)) {
+                                                    workdays.push(dateStr);
+                                                }
+                                            }
+                                            setSelectedModalDates(workdays);
+                                        }}
+                                        className="w-full text-xs font-bold py-2 bg-brand-50 hover:bg-brand-100 text-brand-800 border border-brand-200 rounded-xl transition-colors flex items-center justify-center gap-1.5 shadow-2xs"
+                                    >
+                                        <i className="ph-bold ph-magic-wand text-sm"></i> Pilih Hari Kerja (Senin-Jumat) Bulan Ini
+                                    </button>
+
+                                    {/* Month Days Calendar Grid */}
+                                    <div className="grid grid-cols-7 gap-1 text-center">
+                                        {['Mg', 'Sn', 'Sl', 'Rb', 'Km', 'Jm', 'Sb'].map(d => (
+                                            <span key={d} className="text-[10px] font-extrabold text-slate-400 py-1">{d}</span>
+                                        ))}
+
+                                        {(() => {
+                                            const yr = modalMonth.getFullYear();
+                                            const mo = modalMonth.getMonth();
+                                            const firstDayIdx = new Date(yr, mo, 1).getDay();
+                                            const daysInMo = new Date(yr, mo + 1, 0).getDate();
+                                            const globallyLocked = getGloballyLockedDates(activePeriodId, multiDateModal.weekTarget);
+
+                                            const cells = [];
+                                            for (let i = 0; i < firstDayIdx; i++) {
+                                                cells.push(<div key={`blank-${i}`} />);
+                                            }
+
+                                            for (let d = 1; d <= daysInMo; d++) {
+                                                const dateStr = yr + '-' + String(mo + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+                                                const isSelected = selectedModalDates.includes(dateStr);
+                                                const isLocked = globallyLocked.has(dateStr);
+
+                                                cells.push(
+                                                    <button
+                                                        key={dateStr}
+                                                        disabled={isLocked}
+                                                        onClick={() => {
+                                                            if (isSelected) {
+                                                                setSelectedModalDates(selectedModalDates.filter(s => s !== dateStr));
+                                                            } else {
+                                                                setSelectedModalDates([...selectedModalDates, dateStr]);
+                                                            }
+                                                        }}
+                                                        className={`text-xs py-2 rounded-lg font-bold transition-all ${
+                                                            isLocked
+                                                                ? 'bg-slate-100 text-slate-300 cursor-not-allowed border border-slate-200/50'
+                                                                : isSelected
+                                                                ? 'bg-brand-600 text-white shadow-md shadow-brand-600/30'
+                                                                : 'hover:bg-slate-100 text-slate-700 border border-transparent'
+                                                        }`}
+                                                        title={isLocked ? "Tanggal sudah digunakan" : dateStr}
+                                                    >
+                                                        {d}
+                                                    </button>
+                                                );
+                                            }
+
+                                            return cells;
+                                        })()}
+                                    </div>
+
+                                    <div className="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-100">
+                                        <span>Terpilih: <strong>{selectedModalDates.length} Tanggal</strong></span>
+                                        <button 
+                                            onClick={() => setSelectedModalDates([])}
+                                            className="text-slate-400 hover:text-slate-600 font-semibold"
+                                        >
+                                            Reset
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="p-3 border-t border-slate-100 bg-slate-50 flex justify-end gap-2">
+                                    <button 
+                                        type="button" 
+                                        onClick={() => setMultiDateModal({ isOpen: false, weekTarget: 'week1' })}
+                                        className="px-3.5 py-1.5 text-xs font-bold text-slate-600 bg-slate-200 hover:bg-slate-300 rounded-lg transition-colors"
+                                    >
+                                        Batal
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        onClick={handleSaveMultiDates}
+                                        className="px-4 py-1.5 text-xs font-bold text-white bg-brand-600 hover:bg-brand-700 rounded-lg transition-colors shadow-2xs"
+                                    >
+                                        Simpan Tanggal
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Master Ingredients & Resep Modal */}
+                    {isMasterModalOpen && (
+                        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 fade-in">
+                            <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+                                <div className="p-4 border-b bg-brand-50 border-brand-200 text-brand-900 flex items-center justify-between">
+                                    <div>
+                                        <h3 className="font-extrabold text-sm flex items-center gap-2">
+                                            <i className="ph-bold ph-bookmarks text-base"></i> Kelola Master Bahan & Resep Cloud
+                                        </h3>
+                                    </div>
+                                    <button onClick={() => setIsMasterModalOpen(false)} className="p-1.5 rounded-lg hover:bg-black/10 text-slate-600 transition-colors">
+                                        <i className="ph-bold ph-x text-base"></i>
+                                    </button>
+                                </div>
+
+                                <div className="p-4 overflow-y-auto flex-1 space-y-4">
+                                    <p className="text-xs text-slate-500">Pustaka resep master dan bahan makanan tersimpan secara real-time di Cloud.</p>
+                                </div>
+
+                                <div className="p-3 border-t border-slate-100 bg-slate-50 flex justify-end">
+                                    <button 
+                                        type="button" 
+                                        onClick={() => setIsMasterModalOpen(false)}
+                                        className="px-4 py-1.5 text-xs font-bold bg-slate-800 text-white rounded-lg hover:bg-slate-900"
+                                    >
+                                        Tutup
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Change Password Modal */}
+                    {isChangePasswordModalOpen && (
+                        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 fade-in">
+                            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden">
+                                <div className="p-4 bg-emerald-600 text-white flex items-center justify-between">
+                                    <h3 className="font-extrabold text-sm flex items-center gap-2">
+                                        <i className="ph-bold ph-key text-base"></i> Ubah Password Anda ({currentUser.name})
+                                    </h3>
+                                    <button onClick={() => setIsChangePasswordModalOpen(false)} className="p-1 rounded-lg hover:bg-white/10 transition-colors">
+                                        <i className="ph-bold ph-x text-base"></i>
+                                    </button>
+                                </div>
+
+                                <form onSubmit={handleSavePasswordChange} className="p-5 space-y-3">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-700 mb-1">Password Saat Ini:</label>
+                                        <input 
+                                            type="password"
+                                            required
+                                            value={oldPassword}
+                                            onChange={e => setOldPassword(e.target.value)}
+                                            className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                                            placeholder="Masukkan password lama"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-700 mb-1">Password Baru:</label>
+                                        <input 
+                                            type="password"
+                                            required
+                                            value={newPassword}
+                                            onChange={e => setNewPassword(e.target.value)}
+                                            className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                                            placeholder="Minimal 4 karakter"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-700 mb-1">Konfirmasi Password Baru:</label>
+                                        <input 
+                                            type="password"
+                                            required
+                                            value={confirmPassword}
+                                            onChange={e => setConfirmPassword(e.target.value)}
+                                            className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                                            placeholder="Ulangi password baru"
+                                        />
+                                    </div>
+
+                                    <div className="pt-3 flex justify-end gap-2">
+                                        <button 
+                                            type="button" 
+                                            onClick={() => setIsChangePasswordModalOpen(false)}
+                                            className="px-3.5 py-1.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg"
+                                        >
+                                            Batal
+                                        </button>
+                                        <button 
+                                            type="submit"
+                                            className="px-4 py-1.5 text-xs font-bold text-white bg-brand-600 hover:bg-brand-700 rounded-lg shadow-2xs"
+                                        >
+                                            Simpan Password
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Manage Accounts Modal (Super Admin Addo Only) */}
+                    {isManageAccountsModalOpen && (
+                        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 fade-in">
+                            <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+                                <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+                                    <div>
+                                        <h3 className="font-extrabold text-sm flex items-center gap-2">
+                                            <i className="ph-bold ph-users-three text-base text-brand-400"></i> Kelola Akun Editor & Akses
+                                        </h3>
+                                        <p className="text-[10px] text-slate-300">Khusus Addo (Super Admin)</p>
+                                    </div>
+                                    <button onClick={() => setIsManageAccountsModalOpen(false)} className="p-1.5 rounded-lg hover:bg-white/10 text-slate-300 transition-colors">
+                                        <i className="ph-bold ph-x text-base"></i>
+                                    </button>
+                                </div>
+
+                                <div className="p-5 overflow-y-auto space-y-5">
+                                    <form onSubmit={handleCreateNewEditor} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                                        <h4 className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
+                                            <i className="ph-bold ph-user-plus text-brand-600"></i> Tambah Akun Editor Baru
+                                        </h4>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            <input 
+                                                type="text" 
+                                                placeholder="Username Editor (Cth: Budi)" 
+                                                value={newEditorUsername}
+                                                onChange={e => setNewEditorUsername(e.target.value)}
+                                                className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-1 focus:ring-brand-500 font-semibold"
+                                                required
+                                            />
+                                            <input 
+                                                type="password" 
+                                                placeholder="Password" 
+                                                value={newEditorPassword}
+                                                onChange={e => setNewEditorPassword(e.target.value)}
+                                                className="w-full text-xs px-3 py-2 rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-1 focus:ring-brand-500 font-semibold"
+                                                required
+                                            />
+                                        </div>
+                                        <button 
+                                            type="submit" 
+                                            className="w-full py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs rounded-lg transition-colors flex items-center justify-center gap-1 shadow-2xs"
+                                        >
+                                            <i className="ph-bold ph-plus"></i> Buat Akun Editor Baru
+                                        </button>
+                                    </form>
+
+                                    <div className="space-y-2">
+                                        <h4 className="text-xs font-extrabold text-slate-700 flex items-center justify-between">
+                                            <span>Daftar Akun Editor Terdaftar:</span>
+                                            <span className="text-[10px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded-full">{Object.keys(accounts).length} Akun</span>
+                                        </h4>
+
+                                        <div className="space-y-2">
+                                            {Object.entries(accounts).map(([key, acc]) => {
+                                                const isThisTarget = resetTargetUser === acc.username;
+
+                                                return (
+                                                    <div key={key} className="bg-white border border-slate-200 rounded-xl p-3 flex flex-col gap-2 shadow-2xs">
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center text-slate-700 font-bold text-xs">
+                                                                    {acc.username.charAt(0).toUpperCase()}
+                                                                </div>
+                                                                <div>
+                                                                    <p className="text-xs font-bold text-slate-800">{acc.username}</p>
+                                                                    <p className="text-[10px] text-slate-400">
+                                                                        {acc.isSuperAdmin ? 'Super Admin' : 'Editor'}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+
+                                                            <button 
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    if (isThisTarget) {
+                                                                        setResetTargetUser(null);
+                                                                        setResetNewPassword('');
+                                                                    } else {
+                                                                        setResetTargetUser(acc.username);
+                                                                        setResetNewPassword('');
+                                                                    }
+                                                                }}
+                                                                className="text-xs font-bold text-brand-700 hover:text-brand-800 bg-brand-50 hover:bg-brand-100 px-2.5 py-1 rounded-lg border border-brand-200 transition-colors flex items-center gap-1"
+                                                            >
+                                                                <i className="ph-bold ph-arrow-counter-clockwise"></i> Reset Password
+                                                            </button>
+                                                        </div>
+
+                                                        {isThisTarget && (
+                                                            <div className="mt-1 pt-2 border-t border-slate-100 flex items-center gap-2 fade-in">
+                                                                <input 
+                                                                    type="text" 
+                                                                    placeholder="Password Baru"
+                                                                    value={resetNewPassword}
+                                                                    onChange={e => setResetNewPassword(e.target.value)}
+                                                                    className="w-full text-xs px-2.5 py-1.5 rounded border border-slate-300 bg-slate-50 focus:outline-none focus:ring-1 focus:ring-brand-500 font-medium"
+                                                                    autoFocus
+                                                                />
+                                                                <button 
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        if (!resetNewPassword.trim()) return;
+                                                                        handleResetUserPassword(acc.username, resetNewPassword.trim());
+                                                                    }}
+                                                                    className="bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs px-3 py-1.5 rounded shrink-0 shadow-2xs"
+                                                                >
+                                                                    Simpan
+                                                                </button>
+                                                                <button 
+                                                                    type="button"
+                                                                    onClick={() => setResetTargetUser(null)}
+                                                                    className="text-slate-400 hover:text-slate-600 text-xs px-1.5 py-1.5 shrink-0"
+                                                                >
+                                                                    Batal
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="p-3 border-t border-slate-100 bg-slate-50 flex justify-end">
+                                    <button 
+                                        type="button" 
+                                        onClick={() => setIsManageAccountsModalOpen(false)}
+                                        className="px-4 py-1.5 text-xs font-bold bg-slate-800 text-white rounded-lg hover:bg-slate-900"
+                                    >
+                                        Tutup
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
